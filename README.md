@@ -1,2 +1,2 @@
-# go-pool
+# gowork
 The Worker Pool

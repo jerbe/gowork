@@ -1,4 +1,4 @@
-package go_pool_test
+package gowork_test
 
 import (
 	"fmt"

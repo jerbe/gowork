@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	dispatcher := go_pool.NewDispatcher(1000)
+	dispatcher := gowork.NewDispatcher(1000)
 
 	go dispatcher.Run()
 

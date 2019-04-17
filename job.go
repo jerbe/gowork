@@ -1,4 +1,4 @@
-package go_pool
+package gowork
 
 // Job 任务
 type Job interface {
