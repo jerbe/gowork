@@ -1,1 +1,1 @@
-module github.com/jerbe/go-pool
+module github.com/jerbe/gowork

@@ -7,13 +7,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jerbe/go-pool"
+	"github.com/jerbe/gowork"
 )
 
 func main() {
 	dispatcher := gowork.NewDispatcher(1000)
 
-	go dispatcher.Run()
+	go dispatcher.Start()
 
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGKILL)
@@ -35,7 +35,7 @@ func main() {
 	}()
 
 	log.Println("main 1")
-	time.Sleep(time.Second)
+	time.Sleep(time.Second*5)
 	log.Println("main 2")
 	dispatcher.Stop()
 	log.Println("main 3")

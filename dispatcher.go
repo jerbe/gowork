@@ -2,15 +2,17 @@ package gowork
 
 import (
 	"errors"
-	"log"
+	"sync"
 )
 
 // Dispatcher 分配器
 type Dispatcher interface {
-	Run() error
 	Push(Job) error
 	PushFunc(func() error) error
+
+	Run() error
 	Stop() error
+	Running() bool
 }
 
 // NewDispatcher 返回一个新的分配器
@@ -19,31 +21,18 @@ func NewDispatcher(cap int) Dispatcher {
 		panic(errors.New("cap can't not less than zero"))
 	}
 
-	workers := make([]Worker, cap, cap)
-
-	workerPool := make(workerChan, cap)
-
-	jobQueue := make(jobChan)
-
-	quit := make(chan bool)
-
 	d := &dispatcher{
 		cap: cap,
 
-		workers: workers,
+		workers:  make([]Worker, 0, cap),
 
-		jobQueue: jobQueue,
+		jobQueue: make(jobChan),
 
-		workPool: workerPool,
+		workPool: make(workerChan, cap),
 
-		quit: quit,
+		quit: make(chan bool),
+
 	}
-
-	for i := 0; i < cap; i++ {
-		w := newWorker(d)
-		workers[i] = w
-	}
-
 	return d
 }
 
@@ -59,6 +48,8 @@ type dispatcher struct {
 	quit chan bool
 
 	running bool
+
+	runLocker sync.Mutex
 }
 
 func (d *dispatcher) run() {
@@ -77,20 +68,18 @@ func (d *dispatcher) run() {
 		case <-d.quit:
 			d.stop()
 			return
+
 		}
 	}
 }
 
 // Run 开始并执行分发
 func (d *dispatcher) Run() error {
+	d.runLocker.Lock()
+	defer d.runLocker.Unlock()
+
 	if d.running {
 		return nil
-	}
-
-	d.running = true
-
-	if d.workers == nil || len(d.workers) == 0 {
-		return errors.New("worker is nil")
 	}
 
 	if d.jobQueue == nil {
@@ -105,28 +94,10 @@ func (d *dispatcher) Run() error {
 		d.workers[i].Start()
 	}
 
+	d.running = true
+
 	d.run()
 
-	return nil
-}
-
-// Push 推入一条任务
-func (d *dispatcher) Push(j Job) error {
-	if !d.running {
-		return nil
-	}
-
-	d.jobQueue <- j
-	return nil
-}
-
-// PushFunc 推入一条函数式任务
-func (d *dispatcher) PushFunc(f func() error) error {
-	if !d.running {
-		return nil
-	}
-
-	d.jobQueue <- JobFunc(f)
 	return nil
 }
 
@@ -134,17 +105,43 @@ func (d *dispatcher) stop() {
 	for i := 0; i < len(d.workers); i++ {
 		d.workers[i].Stop()
 	}
-
-	close(d.workPool)
-
-	close(d.jobQueue)
-
-	log.Println("dispatcher.stop()")
 }
 
 // Stop 停止任务
 func (d *dispatcher) Stop() error {
+	if !d.running {
+		return nil
+	}
 	d.running = false
 	d.quit <- true
 	return nil
+}
+
+// Running 任务是否正在执行
+func (d *dispatcher) Running() bool{
+	return d.running
+}
+
+// Push 推入一条任务
+func (d *dispatcher) Push(j Job) error {
+	if !d.running {
+		return errors.New("dispatcher is no running")
+	}
+	if len(d.workers) < d.cap && len(d.workPool) == 0 {
+		w := newWorker(d)
+		d.workers = append(d.workers, w)
+		if d.running {
+			w.Start()
+		}
+	}
+
+	go func() {
+		d.jobQueue <- j
+	}()
+	return nil
+}
+
+// PushFunc 推入一条函数式任务
+func (d *dispatcher) PushFunc(f func() error) error {
+	return d.Push(JobFunc(f))
 }

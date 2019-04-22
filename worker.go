@@ -2,7 +2,7 @@ package gowork
 
 import (
 	"fmt"
-	"log"
+	"sync"
 	"time"
 )
 
@@ -22,6 +22,10 @@ type worker struct {
 	jobChannel jobChan
 
 	quit chan bool
+
+	working bool
+
+	workLocker sync.Mutex
 }
 
 func (w *worker) start() {
@@ -35,12 +39,12 @@ func (w *worker) start() {
 		select {
 		case j := <-w.jobChannel:
 			if err := j.Execute(); err != nil {
-				log.Println("worker.start() -> error", err)
+				if ExecuteErrorHandle != nil {
+					ExecuteErrorHandle(err)
+				}
 			}
 			w.register()
-
 		case <-w.quit:
-			fmt.Println(w.id, "worker quit")
 			return
 		}
 	}
@@ -51,8 +55,11 @@ func (w *worker) register() {
 	d.workPool <- w.jobChannel
 }
 
-// Start 工作者开始
+// Run 工作者开始
 func (w *worker) Start() {
+	w.workLocker.Lock()
+	w.working = true
+	defer w.workLocker.Unlock()
 	go func() {
 		w.register()
 		w.start()
@@ -61,6 +68,11 @@ func (w *worker) Start() {
 
 // Stop 工作者结束
 func (w *worker) Stop() {
+	w.workLocker.Lock()
+	if !w.working {
+		return
+	}
+	defer w.workLocker.Unlock()
 	w.quit <- true
 }
 
@@ -70,7 +82,7 @@ func newWorker(d Dispatcher) Worker {
 
 		jobChannel: make(jobChan),
 
-		dispatcher: Dispatcher(d),
+		dispatcher: d,
 
 		quit: make(chan bool),
 	}
