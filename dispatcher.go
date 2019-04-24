@@ -15,27 +15,6 @@ type Dispatcher interface {
 	Running() bool
 }
 
-// NewDispatcher 返回一个新的分配器
-func NewDispatcher(cap int) Dispatcher {
-	if cap <= 0 {
-		panic(errors.New("cap can't not less than zero"))
-	}
-
-	d := &dispatcher{
-		cap: cap,
-
-		workers:  make([]Worker, 0, cap),
-
-		jobQueue: make(jobChan),
-
-		workPool: make(workerChan, cap),
-
-		quit: make(chan bool),
-
-	}
-	return d
-}
-
 type dispatcher struct {
 	cap int
 
@@ -52,23 +31,52 @@ type dispatcher struct {
 	runLocker sync.Mutex
 }
 
+// NewDispatcher 返回一个新的分配器
+func NewDispatcher(cap int) Dispatcher {
+	if cap <= 0 {
+		panic(errors.New("cap can't not less than zero"))
+	}
+
+	d := &dispatcher{
+		cap: cap,
+
+		workers: make([]Worker, 0, cap),
+
+		jobQueue: make(jobChan),
+
+		workPool: make(workerChan, cap),
+
+		quit: make(chan bool),
+	}
+	return d
+}
+
+func (d *dispatcher) handlerJob(job Job) {
+	for {
+		select {
+		case jc, ok := <-d.workPool:
+			if ok {
+				jc <- job
+			}
+			//注意,一定要退出,否则会常驻
+			return
+		default:
+		}
+	}
+}
+
 func (d *dispatcher) run() {
 	for {
 		select {
 		case job, ok := <-d.jobQueue:
 			if ok {
-				go func(j Job) {
-					jc, ok := <-d.workPool
-					if ok {
-						jc <- j
-					}
-				}(job)
+				// 开启一个新的协程进行监听
+				go d.handlerJob(job)
 			}
 
 		case <-d.quit:
 			d.stop()
 			return
-
 		}
 	}
 }
@@ -118,7 +126,7 @@ func (d *dispatcher) Stop() error {
 }
 
 // Running 任务是否正在执行
-func (d *dispatcher) Running() bool{
+func (d *dispatcher) Running() bool {
 	return d.running
 }
 
@@ -127,6 +135,7 @@ func (d *dispatcher) Push(j Job) error {
 	if !d.running {
 		return errors.New("dispatcher is no running")
 	}
+
 	if len(d.workers) < d.cap && len(d.workPool) == 0 {
 		w := newWorker(d)
 		d.workers = append(d.workers, w)

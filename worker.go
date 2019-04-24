@@ -36,6 +36,7 @@ func (w *worker) start() {
 	}()
 
 	for {
+		w.register()
 		select {
 		case j := <-w.jobChannel:
 			if err := j.Execute(); err != nil {
@@ -43,7 +44,7 @@ func (w *worker) start() {
 					ExecuteErrorHandle(err)
 				}
 			}
-			w.register()
+
 		case <-w.quit:
 			return
 		}
@@ -58,10 +59,12 @@ func (w *worker) register() {
 // Run 工作者开始
 func (w *worker) Start() {
 	w.workLocker.Lock()
-	w.working = true
 	defer w.workLocker.Unlock()
+	w.working = true
+	if w.working {
+		return
+	}
 	go func() {
-		w.register()
 		w.start()
 	}()
 }
