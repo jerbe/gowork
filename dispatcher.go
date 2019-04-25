@@ -3,12 +3,14 @@ package gowork
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 // Dispatcher 分配器
 type Dispatcher interface {
 	Push(Job) error
 	PushFunc(func() error) error
+	Length() int64
 
 	Run() error
 	Stop() error
@@ -29,6 +31,8 @@ type dispatcher struct {
 	running bool
 
 	runLocker sync.Mutex
+
+	length int64
 }
 
 // NewDispatcher 返回一个新的分配器
@@ -98,8 +102,18 @@ func (d *dispatcher) Run() error {
 		return errors.New("work pool was nil")
 	}
 
-	for i := 0; i < len(d.workers); i++ {
-		d.workers[i].Start()
+	// 如果工作者数量是0的话
+	if len(d.workers) == 0 {
+		//如果任务长度大于0
+		if d.length > 0 {
+			w := newWorker(d)
+			d.workers = append(d.workers, w)
+			w.Start()
+		}
+	} else {
+		for i := 0; i < len(d.workers); i++ {
+			d.workers[i].Start()
+		}
 	}
 
 	d.running = true
@@ -132,19 +146,18 @@ func (d *dispatcher) Running() bool {
 
 // Push 推入一条任务
 func (d *dispatcher) Push(j Job) error {
-	if !d.running {
-		return errors.New("dispatcher is no running")
-	}
-
-	if len(d.workers) < d.cap && len(d.workPool) == 0 {
-		w := newWorker(d)
-		d.workers = append(d.workers, w)
-		if d.running {
-			w.Start()
+	if d.running {
+		if len(d.workers) < d.cap && len(d.workPool) == 0 {
+			w := newWorker(d)
+			d.workers = append(d.workers, w)
+			if d.running {
+				w.Start()
+			}
 		}
 	}
 
 	go func() {
+		atomic.AddInt64(&d.length, 1)
 		d.jobQueue <- j
 	}()
 	return nil
@@ -153,4 +166,9 @@ func (d *dispatcher) Push(j Job) error {
 // PushFunc 推入一条函数式任务
 func (d *dispatcher) PushFunc(f func() error) error {
 	return d.Push(JobFunc(f))
+}
+
+// Length 获取当前执行的任务长度
+func (d *dispatcher) Length() int64 {
+	return atomic.LoadInt64(&d.length)
 }

@@ -3,6 +3,7 @@ package gowork
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,6 +40,7 @@ func (w *worker) start() {
 		w.register()
 		select {
 		case j := <-w.jobChannel:
+			atomic.AddInt64(&w.dispatcher.(*dispatcher).length, -1)
 			if err := j.Execute(); err != nil {
 				if ExecuteErrorHandle != nil {
 					ExecuteErrorHandle(err)
@@ -59,11 +61,12 @@ func (w *worker) register() {
 // Run 工作者开始
 func (w *worker) Start() {
 	w.workLocker.Lock()
+
 	defer w.workLocker.Unlock()
-	w.working = true
 	if w.working {
 		return
 	}
+	w.working = true
 	go func() {
 		w.start()
 	}()
