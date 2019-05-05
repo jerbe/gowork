@@ -1,7 +1,6 @@
 package gowork
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 )
@@ -38,7 +37,7 @@ type dispatcher struct {
 // NewDispatcher 返回一个新的分配器
 func NewDispatcher(cap int) Dispatcher {
 	if cap <= 0 {
-		panic(errors.New("cap can't not less than zero"))
+		panic(ErrCapLessThanZero)
 	}
 
 	d := &dispatcher{
@@ -95,11 +94,11 @@ func (d *dispatcher) Run() error {
 	}
 
 	if d.jobQueue == nil {
-		return errors.New("job queue was nil")
+		return ErrJobQueueNil
 	}
 
 	if d.workPool == nil {
-		return errors.New("work pool was nil")
+		return ErrWorkPoolNil
 	}
 
 	// 如果工作者数量是0的话

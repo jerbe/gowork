@@ -15,8 +15,7 @@ func (j JobFunc) Execute() error {
 	return j()
 }
 
-
-var(
+var (
 	// 执行错误时调用的方法
 	ExecuteErrorHandle func(error)
 )

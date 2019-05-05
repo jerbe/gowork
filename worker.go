@@ -48,6 +48,7 @@ func (w *worker) start() {
 			}
 
 		case <-w.quit:
+			w.working = false
 			return
 		}
 	}
@@ -61,8 +62,8 @@ func (w *worker) register() {
 // Run 工作者开始
 func (w *worker) Start() {
 	w.workLocker.Lock()
-
 	defer w.workLocker.Unlock()
+
 	if w.working {
 		return
 	}
@@ -75,10 +76,11 @@ func (w *worker) Start() {
 // Stop 工作者结束
 func (w *worker) Stop() {
 	w.workLocker.Lock()
+	defer w.workLocker.Unlock()
+
 	if !w.working {
 		return
 	}
-	defer w.workLocker.Unlock()
 	w.quit <- true
 }
 
